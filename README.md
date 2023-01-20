@@ -1,3 +1,5 @@
+// Reworked service to have dynamic mqtt topics (multiple em24 via ports) and added 3 phase functionality.
+
 Works with Victron Energy ESS<br>
 
 Subscribe to a local MQTT broker and make energy data available on a Modbus server
