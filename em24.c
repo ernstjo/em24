@@ -19,12 +19,42 @@
         tab_int16[(index) + 1] = (value) >> 16; \
     } while (0)
 
+#define MODBUS_SET_UINT16(tab_int16, index, value) \
+    tab_int16[(index)] = (value);
+
 #define NB_CONNECTION	10
 
 static modbus_t *ctx = NULL;
 static modbus_mapping_t *mb_mapping;
 static int server_socket = -1;
 static int vflag = false;
+char *topic_prefix;
+
+// Counters
+float n,n1,n2,n3 = 0.0;
+float e,e1,e2,e3 = 0.0;
+float u1,u2,u3 = 0.0;
+float i,i1,i2,i3 = 0.0;
+float p,p1,p2,p3 = 0.0;
+float hz = 0.0;
+
+char* concat(const char* str1, const char* str2)
+{
+    char* result;
+    asprintf(&result, "%s%s", str1, str2);
+    return result;
+}
+
+char *strremove(char *str, const char *sub) {
+    size_t len = strlen(sub);
+    if (len > 0) {
+        char *p = str;
+        while ((p = strstr(p, sub)) != NULL) {
+            memmove(p, p + len, strlen(p + len) + 1);
+        }
+    }
+    return str;
+}
 
 static void close_sigint(int dummy)
 {
@@ -43,35 +73,77 @@ void on_connect(struct mosquitto *mosq, void *obj, int rc) {
 		printf("Error with result code: %d\n", rc);
 		exit(-1);
 	}
-	mosquitto_subscribe(mosq, NULL, "smartmeter/mains/sensor/#", 0);
+
+	mosquitto_subscribe(mosq, NULL, concat(topic_prefix, "#"), 0);
 }
 
 void on_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *msg) {
-	float u1,i1,p1,e1,n;
+    char *sensor;
+    sensor = strdup(msg->topic);
+    sensor = strremove(sensor, topic_prefix);
+
 	(void)mosq;
 	(void)obj;
 	if(vflag) {
 		printf("New message with topic %s: %s\n", msg->topic, (char *) msg->payload);
+        printf("%s \n", sensor);
+        printf("%s \n", msg->topic);
 	}
-	if(strncmp(msg->topic, "smartmeter/mains/sensor/1/obis/1-0:16.7.0/255/value", 51) == 0) {
-		sscanf(msg->payload, "%f", &p1);
-		u1 = 240.0;
-		i1 = p1 / u1;
-//		printf("p1=%f, u1=%f, i1=%f\n", p1, u1, i1);
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0000, (int32_t)round(u1 * 10));   // u1
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x000c, (int32_t)round(i1 * 1000)); // i1
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0012, (int32_t)round(p1 * 10));   // p1
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0028, (int32_t)round(p1 * 10));   // p total
-	} else if(strncmp(msg->topic, "smartmeter/mains/sensor/1/obis/1-0:1.8.0/255/value", 50) == 0) {
-		sscanf(msg->payload, "%f", &e1);
-//		printf("e1=%f\n", e1);
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0040, (int32_t)round(e1 * 0.01));   // e1
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0034, (int32_t)round(e1 * 0.01));   // e total
-	} else if(strncmp(msg->topic, "smartmeter/mains/sensor/1/obis/1-0:2.8.0/255/value", 50) == 0) {
-		sscanf(msg->payload, "%f", &n);
+    if(strncmp(sensor, "voltage1", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &u1);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0000, (int32_t) round(u1 * 10));   // u1
+        //printf("voltage1: %f\n", u1);
+    } else if(strncmp(sensor, "voltage2", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &u2);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0002, (int32_t) round(u2 * 10));   // u2
+        //printf("voltage2: %f\n", u2);
+    } else if(strncmp(sensor, "voltage3", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &u3);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0004, (int32_t) round(u3 * 10));   // u3
+        //printf("voltage3: %f\n", u3);
+    } else if(strncmp(sensor, "current1", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &i1);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x000c, (int32_t) round(i1 * 10));   // i1
+        //printf("current1: %f\n", i1);
+    } else if(strncmp(sensor, "current2", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &i2);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x000e, (int32_t) round(i2 * 10));   // i2
+    } else if(strncmp(sensor, "current3", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &i3);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0010, (int32_t) round(i3 * 10));   // i3
+    } else if(strncmp(sensor, "power1", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &p1);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0012, (int32_t) round(p1 * 10));   // p1
+        p = p1 + p2 + p3;
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0028, (int32_t)round(p * 10));   // p total
+    } else if(strncmp(sensor, "power2", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &p2);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0014, (int32_t) round(p2 * 10));   // p2
+        p = p1 + p2 + p3;
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0028, (int32_t)round(p * 10));   // p total
+    } else if(strncmp(sensor, "power3", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &p3);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0016, (int32_t) round(p3 * 10));   // p3
+        p = p1 + p2 + p3;
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0028, (int32_t)round(p * 10));   // p total
+    } else if(strncmp(sensor, "power", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &p);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0028, (int32_t)round(p * 10));   // p total
+    } else if(strncmp(sensor, "import", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &n);
 //		printf("n=%f\n", n);
-		MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x004e, (int32_t)round(e1 * 0.01));   // e total negative
-	}
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x004e, (int32_t)round(n * 0.01));   // e total negative
+    } else if(strncmp(sensor, "export", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &e);
+//		printf("n=%f\e", e);
+        MODBUS_SET_INT32_TO_INT16_REV(mb_mapping->tab_registers, 0x0034, (int32_t)round(e * 0.01));   // e total
+    } else if(strncmp(sensor, "hz", strlen(sensor)) == 0) {
+        sscanf(msg->payload, "%f", &hz);
+//		printf("n=%f\e", e);
+        MODBUS_SET_UINT16(mb_mapping->tab_registers, 0x0033, (int32_t)round(hz * 10));   // Hz
+    }
+
+    printf("p1=%f, u1=%f, u2=%f, i1=%f, p=%f\n", p1, u1, u2, i1, p);
 }
 
 int main(int argc, char *argv[]) {
@@ -83,14 +155,23 @@ int main(int argc, char *argv[]) {
 	int fdmax;
 	int port=502;
 	char ip[16] = "0.0.0.0";
+    char *broker;
+    int broker_port=1883;
+    bool initialized = 0;
+    bool initialized1 = 0;
 
-	while((c = getopt(argc, argv, "+hi:p:v")) != -1) {
+    printf("f");
+
+	while((c = getopt(argc, argv, "+hi:p:vb:k:t:")) != -1) {
 		switch (c) {
 		case 'h':
 			printf("usage: %s [-h] [-a address] [-p port] [-v]\n", argv[0]);
 			printf("-h - help\n");
 			printf("-i - ipaddress, default = 0.0.0.0\n");
 			printf("-p - port, default = 502\n");
+            printf("-b - broker ip, default = 127.0.0.1\n");
+            printf("-k - broker port, default = 1883\n");
+            printf("-t - mqtt topic, default = /test/\n");
 			printf("-v - verbose\n");
 			exit(0);
 			break;
@@ -111,10 +192,38 @@ int main(int argc, char *argv[]) {
 			printf("Use %s -h for help\n", argv[0]);
 			exit(1);
 			break;
+        case 'b':
+            broker = (char *)malloc((strlen(optarg)+1) * sizeof(char));
+            strncpy(broker,optarg,strlen(optarg));
+            printf("Broker: %s \n", broker);
+            initialized1 = 1;
+            break;
+        case 'k':
+            broker_port = atoi(optarg);
+            if((broker_port <= 0) || (broker_port > 65535)) {
+                printf("Portnumber has to be > 0 and <= 65535\n");
+                exit(1);
+            }
+            break;
+        case 't':
+            topic_prefix = (char *)malloc((strlen(optarg)+128) * sizeof(char));
+            strncpy(topic_prefix,optarg,strlen(optarg));
+            initialized = 1;
+            printf("Topic %s \n", topic_prefix);
+            break;
 		default:
 			break;
 		}
 	}
+
+    if(!initialized) {
+        topic_prefix = "/test/";
+    }
+
+    if(!initialized1) {
+        broker = (char *)malloc(50 * sizeof(char));
+        broker = "localhost";
+    }
 
 	ctx = modbus_new_tcp(ip, port);
 	if(ctx == NULL) {
@@ -138,7 +247,7 @@ int main(int argc, char *argv[]) {
 	mb_mapping->tab_registers[0xa000] = 7;     // application set to H
 	mb_mapping->tab_registers[0x0302] = 0;     // hardware version
 	mb_mapping->tab_registers[0x0304] = 0;     // firmware version
-	mb_mapping->tab_registers[0x1002] = 3;     // phase config: 1P
+	mb_mapping->tab_registers[0x1002] = 4;     // phase config: 3P
 	mb_mapping->tab_registers[0x5000] = ('0' << 8) | '0';  // serial
 	mb_mapping->tab_registers[0x5001] = ('0' << 8) | '0';  // serial
 	mb_mapping->tab_registers[0x5002] = ('0' << 8) | '0';  // serial
@@ -158,7 +267,7 @@ int main(int argc, char *argv[]) {
 	mosquitto_connect_callback_set(mosq, on_connect);
 	mosquitto_message_callback_set(mosq, on_message);
 	
-	rc = mosquitto_connect(mosq, "localhost", 1883, 10);
+	rc = mosquitto_connect(mosq, broker, broker_port, 10);
 	if(rc) {
 		printf("Could not connect to Broker with return code %d\n", rc);
 		modbus_mapping_free(mb_mapping);
