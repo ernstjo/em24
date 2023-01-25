@@ -29,8 +29,9 @@ static modbus_mapping_t *mb_mapping;
 static int server_socket = -1;
 static int vflag = false;
 char *topic_prefix;
+char *broker;
 
-// Counters
+/* fix counter vars */
 float n,n1,n2,n3 = 0.0;
 float e,e1,e2,e3 = 0.0;
 float u1,u2,u3 = 0.0;
@@ -63,6 +64,10 @@ static void close_sigint(int dummy)
     }
     modbus_free(ctx);
     modbus_mapping_free(mb_mapping);
+
+    /* free memory */
+    free(broker);
+    free(topic_prefix);
 
     exit(dummy);
 }
@@ -155,7 +160,6 @@ int main(int argc, char *argv[]) {
 	int fdmax;
 	int port=502;
 	char ip[16] = "0.0.0.0";
-    char *broker;
     int broker_port=1883;
     bool initialized = 0;
     bool initialized1 = 0;
@@ -373,6 +377,7 @@ int main(int argc, char *argv[]) {
 			}
 		}
 	}
+
 /*
 	if(s != -1) {
 		close(server_socket);
