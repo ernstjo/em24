@@ -3,7 +3,7 @@ Description=EM24 emulator, MQTT to Modbus
 After=syslog.target network.target
 
 [Service]
-ExecStart=/usr/local/bin/em24
+ExecStart=/usr/local/bin/em24 -b 127.0.0.1 -t /power/sensor/1/
 ExecReload=
 StandardOutput=syslog
 Restart=always
